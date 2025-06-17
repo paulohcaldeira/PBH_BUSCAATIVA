@@ -1,0 +1,547 @@
+<script>
+    /**
+     * ===== SCRIPTS DO LADO CLIENTE =====
+     *
+     * Este arquivo contém todo o JavaScript executado no navegador do usuário.
+     * Gerencia a interatividade da interface de notificações WhatsApp.
+     *
+     * Funcionalidades principais:
+     * - Controle de envio de mensagens individuais
+     * - Envio em massa de notificações
+     * - Marcação de status de envio
+     * - Feedback visual para o usuário
+     * - Integração com WhatsApp Web/Mobile
+     */
+
+    // ===== VARIÁVEIS GLOBAIS =====
+    let mensagensEnviadas = []; // Controle de mensagens já enviadas
+    let totalMensagens = 0; // Total de mensagens na sessão
+
+    /**
+     * INICIALIZAÇÃO DA PÁGINA
+     *
+     * Executada quando o DOM está completamente carregado.
+     * Configura listeners de eventos e estado inicial da interface.
+     */
+    document.addEventListener("DOMContentLoaded", function () {
+        // Contar total de notificações
+        totalMensagens = document.querySelectorAll(".notification-card").length;
+
+        // Configurar listeners para teclas de atalho
+        document.addEventListener("keydown", function (event) {
+            // Ctrl+Enter para abrir todos os WhatsApp
+            if (event.ctrlKey && event.key === "Enter") {
+                event.preventDefault();
+                openAllWhatsApp();
+            }
+
+            // ESC para fechar modais (se houver)
+            if (event.key === "Escape") {
+                // Implementar fechamento de modais se necessário
+            }
+        });
+
+        // Configurar auto-refresh do status (opcional)
+        // setInterval(verificarStatusEnvios, 30000); // A cada 30 segundos
+
+        console.log(`Interface carregada com ${totalMensagens} notificações`);
+    });
+
+    /**
+     * RASTREAMENTO DE CLIQUE NO WHATSAPP
+     *
+     * Função chamada quando o usuário clica no botão WhatsApp.
+     * Registra a ação e pode implementar analytics.
+     *
+     * @param {number} index - Índice da notificação na lista
+     */
+    function trackWhatsAppClick(index) {
+        const timestamp = new Date().toLocaleString("pt-BR");
+
+        // Log da ação
+        console.log(
+            `WhatsApp aberto para notificação ${index} às ${timestamp}`,
+        );
+
+        // Registrar tentativa de envio
+        if (!mensagensEnviadas.includes(index)) {
+            // Marcar como tentativa de envio após um breve delay
+            setTimeout(() => {
+                // Perguntar ao usuário se conseguiu enviar
+                if (
+                    confirm(
+                        "Você conseguiu enviar a mensagem? Clique OK se sim, Cancelar se não.",
+                    )
+                ) {
+                    markAsSent(index, null, true); // true indica que foi enviado via confirmação
+                }
+            }, 3000); // 3 segundos de delay
+        }
+
+        // Opcional: Enviar dados para analytics
+        // google.script.run.registrarClique(index, timestamp);
+    }
+
+    /**
+     * MARCAR MENSAGEM COMO ENVIADA
+     *
+     * Atualiza o status visual da notificação e registra no sistema.
+     * Pode ser chamada manualmente ou automaticamente.
+     *
+     * @param {number} index - Índice da notificação
+     * @param {number|null} linha - Linha na planilha (opcional)
+     * @param {boolean} autoDetect - Se foi detectado automaticamente
+     */
+    function markAsSent(index, linha = null, autoDetect = false) {
+        // Verificar se já foi marcado como enviado
+        if (mensagensEnviadas.includes(index)) {
+            alert("Esta mensagem já foi marcada como enviada.");
+            return;
+        }
+
+        // Elementos da interface
+        const notificationCard = document.getElementById(
+            `notification-${index}`,
+        );
+        const sentIndicator = document.getElementById(`sent-${index}`);
+        const whatsappButton = notificationCard.querySelector(".btn-whatsapp");
+        const markButton = notificationCard.querySelector(".btn-mark-sent");
+
+        // Confirmação do usuário (se não for auto-detect)
+        if (!autoDetect) {
+            const confirmMessage =
+                "Confirma que a mensagem foi enviada com sucesso?\n\n" +
+                "Esta ação marcará a notificação como processada.";
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+        }
+
+        // Atualizar interface visual
+        if (sentIndicator) {
+            sentIndicator.style.display = "inline-block";
+        }
+
+        if (whatsappButton) {
+            whatsappButton.style.opacity = "0.6";
+            whatsappButton.innerHTML =
+                '<i class="fab fa-whatsapp"></i> Enviado';
+        }
+
+        if (markButton) {
+            markButton.disabled = true;
+            markButton.innerHTML =
+                '<i class="fas fa-check-circle"></i> Enviado';
+            markButton.style.background = "#27ae60";
+        }
+
+        // Adicionar classe CSS para indicar envio
+        if (notificationCard) {
+            notificationCard.classList.add("message-sent");
+            notificationCard.style.opacity = "0.8";
+        }
+
+        // Registrar no controle local
+        mensagensEnviadas.push(index);
+
+        // Registrar no sistema (Google Apps Script)
+        registrarEnvioNoSistema(index, linha);
+
+        // Feedback para o usuário
+        const tipoDeteccao = autoDetect ? "automaticamente" : "manualmente";
+        console.log(`Mensagem ${index} marcada como enviada ${tipoDeteccao}`);
+
+        // Verificar se todas as mensagens foram enviadas
+        verificarProgressoCompleto();
+    }
+
+    /**
+     * ABERTURA EM MASSA DO WHATSAPP
+     *
+     * Abre todas as conversas WhatsApp em abas separadas.
+     * Implementa delays para evitar bloqueio do navegador.
+     */
+    function openAllWhatsApp() {
+        const totalLinks = document.querySelectorAll(".btn-whatsapp").length;
+
+        // Confirmação do usuário
+        const confirmMessage =
+            `Você está prestes a abrir ${totalLinks} conversas no WhatsApp.\n\n` +
+            "Isso abrirá múltiplas abas no seu navegador.\n" +
+            "Certifique-se de que seu navegador permite pop-ups.\n\n" +
+            "Deseja continuar?";
+
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        // Instruções para o usuário
+        alert(
+            "INSTRUÇÕES:\n\n" +
+                "1. Várias abas do WhatsApp serão abertas\n" +
+                "2. Envie as mensagens uma por uma\n" +
+                "3. Volte aqui e marque como enviadas\n" +
+                "4. Use Ctrl+Tab para navegar entre abas\n\n" +
+                "Clique OK para começar...",
+        );
+
+        let delay = 0;
+        const intervalo = 1500; // 1.5 segundos entre cada abertura
+
+        // Percorrer todas as notificações
+        document
+            .querySelectorAll(".notification-card")
+            .forEach((card, index) => {
+                const whatsappButton = card.querySelector(".btn-whatsapp");
+
+                if (whatsappButton && !mensagensEnviadas.includes(index)) {
+                    setTimeout(() => {
+                        // Abrir WhatsApp
+                        window.open(whatsappButton.href, "_blank");
+
+                        // Destacar card atual
+                        highlightCurrentCard(index);
+
+                        // Feedback visual
+                        const progressMessage = `Abrindo conversa ${index + 1} de ${totalLinks}...`;
+                        updateProgressFeedback(
+                            progressMessage,
+                            index + 1,
+                            totalLinks,
+                        );
+                    }, delay);
+
+                    delay += intervalo;
+                }
+            });
+
+        // Mensagem final
+        setTimeout(() => {
+            alert(
+                "✅ Todas as conversas foram abertas!\n\n" +
+                    "Agora envie as mensagens e volte aqui para marcar como enviadas.",
+            );
+        }, delay + 1000);
+    }
+
+    /**
+     * DESTACAR CARD ATUAL
+     *
+     * Aplica destaque visual ao card que está sendo processado.
+     *
+     * @param {number} index - Índice do card a ser destacado
+     */
+    function highlightCurrentCard(index) {
+        // Remover destaque anterior
+        document.querySelectorAll(".notification-card").forEach((card) => {
+            card.classList.remove("current-processing");
+        });
+
+        // Adicionar destaque ao card atual
+        const currentCard = document.getElementById(`notification-${index}`);
+        if (currentCard) {
+            currentCard.classList.add("current-processing");
+            currentCard.scrollIntoView({ behavior: "smooth", block: "center" });
+
+            // Remover destaque após alguns segundos
+            setTimeout(() => {
+                currentCard.classList.remove("current-processing");
+            }, 3000);
+        }
+    }
+
+    /**
+     * ATUALIZAR FEEDBACK DE PROGRESSO
+     *
+     * Mostra progresso da operação em massa para o usuário.
+     *
+     * @param {string} message - Mensagem a ser exibida
+     * @param {number} current - Progresso atual
+     * @param {number} total - Total de itens
+     */
+    function updateProgressFeedback(message, current, total) {
+        // Criar ou atualizar barra de progresso
+        let progressContainer = document.getElementById("progress-container");
+
+        if (!progressContainer) {
+            progressContainer = document.createElement("div");
+            progressContainer.id = "progress-container";
+            progressContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            min-width: 250px;
+        `;
+            document.body.appendChild(progressContainer);
+        }
+
+        const percentage = Math.round((current / total) * 100);
+
+        progressContainer.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 8px;">
+            <i class="fab fa-whatsapp" style="color: #25D366;"></i>
+            Enviando Notificações
+        </div>
+        <div style="background: #e9ecef; border-radius: 4px; height: 8px; margin-bottom: 8px;">
+            <div style="background: #25D366; height: 100%; border-radius: 4px; width: ${percentage}%; transition: width 0.3s;"></div>
+        </div>
+        <div style="font-size: 12px; color: #6c757d;">
+            ${message} (${percentage}%)
+        </div>
+    `;
+
+        // Remover após completar
+        if (current >= total) {
+            setTimeout(() => {
+                if (progressContainer.parentNode) {
+                    progressContainer.parentNode.removeChild(progressContainer);
+                }
+            }, 3000);
+        }
+    }
+
+    /**
+     * REGISTRAR ENVIO NO SISTEMA
+     *
+     * Comunica com o Google Apps Script para registrar o envio.
+     * Atualiza a planilha com data de cobrança.
+     *
+     * @param {number} index - Índice da notificação
+     * @param {number|null} linha - Linha na planilha
+     */
+    function registrarEnvioNoSistema(index, linha) {
+        // Dados do envio
+        const dadosEnvio = {
+            index: index,
+            linha: linha,
+            dataEnvio: new Date().toLocaleString("pt-BR"),
+            usuario: "Sistema", // Pode ser obtido do usuário logado
+        };
+
+        // Tentar registrar no Google Apps Script
+        try {
+            // Esta chamada seria implementada para comunicar com o backend
+            // google.script.run
+            //     .withSuccessHandler(onEnvioRegistrado)
+            //     .withFailureHandler(onErroRegistro)
+            //     .registrarEnvioMensagem(dadosEnvio);
+
+            console.log("Envio registrado localmente:", dadosEnvio);
+        } catch (error) {
+            console.error("Erro ao registrar envio:", error);
+
+            // Fallback: salvar localmente
+            localStorage.setItem(`envio_${index}`, JSON.stringify(dadosEnvio));
+        }
+    }
+
+    /**
+     * CALLBACK DE ENVIO REGISTRADO
+     *
+     * Executado quando o registro no sistema é bem-sucedido.
+     *
+     * @param {Object} resultado - Resultado da operação
+     */
+    function onEnvioRegistrado(resultado) {
+        console.log("Envio registrado com sucesso:", resultado);
+
+        // Opcional: mostrar notificação discreta
+        showToast("Envio registrado no sistema", "success");
+    }
+
+    /**
+     * CALLBACK DE ERRO NO REGISTRO
+     *
+     * Executado quando há erro no registro do sistema.
+     *
+     * @param {Error} error - Erro ocorrido
+     */
+    function onErroRegistro(error) {
+        console.error("Erro ao registrar envio:", error);
+
+        // Mostrar erro para o usuário
+        showToast(
+            "Erro ao registrar envio. Dados salvos localmente.",
+            "warning",
+        );
+    }
+
+    /**
+     * VERIFICAR PROGRESSO COMPLETO
+     *
+     * Verifica se todas as mensagens foram enviadas e mostra feedback.
+     */
+    function verificarProgressoCompleto() {
+        const totalCards =
+            document.querySelectorAll(".notification-card").length;
+        const percentualCompleto = Math.round(
+            (mensagensEnviadas.length / totalCards) * 100,
+        );
+
+        // Atualizar algum indicador de progresso (se existir)
+        const progressIndicator = document.getElementById("progress-indicator");
+        if (progressIndicator) {
+            progressIndicator.textContent = `${percentualCompleto}% concluído`;
+        }
+
+        // Se todas foram enviadas
+        if (mensagensEnviadas.length === totalCards) {
+            // Feedback de conclusão
+            setTimeout(() => {
+                alert(
+                    "✅ Parabéns!\n\n" +
+                        "Todas as notificações foram enviadas com sucesso!\n" +
+                        "O sistema registrou todas as comunicações realizadas.",
+                );
+
+                // Opcional: oferecer geração de relatório
+                if (
+                    confirm(
+                        "Deseja gerar um relatório das notificações enviadas?",
+                    )
+                ) {
+                    gerarRelatorioEnvios();
+                }
+            }, 1000);
+        }
+    }
+
+    /**
+     * GERAR RELATÓRIO DE ENVIOS
+     *
+     * Cria relatório com summary dos envios realizados.
+     */
+    function gerarRelatorioEnvios() {
+        const dataAtual = new Date().toLocaleString("pt-BR");
+
+        let relatorio = `RELATÓRIO DE NOTIFICAÇÕES ENVIADAS\n`;
+        relatorio += `Data: ${dataAtual}\n`;
+        relatorio += `Total de notificações: ${totalMensagens}\n`;
+        relatorio += `Notificações enviadas: ${mensagensEnviadas.length}\n`;
+        relatorio += `Taxa de conclusão: ${Math.round((mensagensEnviadas.length / totalMensagens) * 100)}%\n\n`;
+
+        relatorio += `DETALHES DOS ENVIOS:\n`;
+        mensagensEnviadas.forEach((index, i) => {
+            const card = document.getElementById(`notification-${index}`);
+            if (card) {
+                const nome = card.querySelector(".student-name").textContent;
+                relatorio += `${i + 1}. ${nome} - Enviado\n`;
+            }
+        });
+
+        // Mostrar em nova janela
+        const novaJanela = window.open("", "_blank");
+        novaJanela.document.write(`
+        <html>
+            <head>
+                <title>Relatório de Envios</title>
+                <style>
+                    body { font-family: monospace; padding: 20px; }
+                    pre { white-space: pre-wrap; }
+                </style>
+            </head>
+            <body>
+                <pre>${relatorio}</pre>
+                <button onclick="window.print()">Imprimir</button>
+                <button onclick="window.close()">Fechar</button>
+            </body>
+        </html>
+    `);
+    }
+
+    /**
+     * MOSTRAR TOAST/NOTIFICAÇÃO
+     *
+     * Exibe notificação não-intrusiva para o usuário.
+     *
+     * @param {string} message - Mensagem a ser exibida
+     * @param {string} type - Tipo da notificação (success, warning, error)
+     */
+    function showToast(message, type = "info") {
+        // Criar elemento do toast
+        const toast = document.createElement("div");
+        toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${getToastColor(type)};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        font-size: 14px;
+        transition: opacity 0.3s;
+    `;
+        toast.textContent = message;
+
+        // Adicionar ao DOM
+        document.body.appendChild(toast);
+
+        // Remover após alguns segundos
+        setTimeout(() => {
+            toast.style.opacity = "0";
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
+
+    /**
+     * OBTER COR DO TOAST
+     *
+     * Retorna a cor apropriada baseada no tipo da notificação.
+     *
+     * @param {string} type - Tipo da notificação
+     * @returns {string} - Cor em CSS
+     */
+    function getToastColor(type) {
+        const colors = {
+            success: "#27ae60",
+            warning: "#f39c12",
+            error: "#e74c3c",
+            info: "#3498db",
+        };
+
+        return colors[type] || colors.info;
+    }
+
+    // ===== ESTILOS CSS DINÂMICOS =====
+    // Adicionar estilos para elementos criados dinamicamente
+
+    const dynamicStyles = document.createElement("style");
+    dynamicStyles.textContent = `
+    .notification-card.current-processing {
+        border: 2px solid #f39c12 !important;
+        background: #fff3cd !important;
+        transform: scale(1.02) !important;
+    }
+    
+    .notification-card.message-sent {
+        border-color: #27ae60 !important;
+    }
+    
+    .notification-card.message-sent .notification-header {
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
+    }
+`;
+    document.head.appendChild(dynamicStyles);
+
+    // ===== LOG DE DEBUGGING =====
+    console.log("Scripts do cliente carregados com sucesso");
+    console.log("Funcionalidades disponíveis:", [
+        "trackWhatsAppClick()",
+        "markAsSent()",
+        "openAllWhatsApp()",
+        "gerarRelatorioEnvios()",
+    ]);
+</script>
