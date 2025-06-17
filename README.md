@@ -20,11 +20,10 @@ O Sistema de Controle de Frequência Escolar é uma aplicação desenvolvida em 
 - **Google Apps Script**: Backend e lógica principal
 - **Google Sheets**: Armazenamento e gerenciamento de dados
 - **HTML/CSS/JavaScript**: Interface web responsiva
-- **WhatsApp Business API**: Integração para notificações
 
-## 📊 Estrutura de Dados
+## 📊 Estrutura da Planilha
 
-### Planilha "registroFaltas"
+### aba "registroFaltas"
 | Coluna | Campo | Descrição |
 |--------|-------|-----------|
 | A | Mês | Mês da falta |
@@ -39,11 +38,17 @@ O Sistema de Controle de Frequência Escolar é uma aplicação desenvolvida em 
 | J | Data Cobrança | Data da cobrança realizada |
 | K | Link WhatsApp | Link gerado para WhatsApp |
 
-### Planilha "dados"
+### aba "dados"
 | Coluna | Campo | Descrição |
 |--------|-------|-----------|
 | A | Nome do Aluno | Nome completo do aluno |
 | B | Responsável | Nome do responsável |
+| C | Telefone 1 | Telefone do responsável |
+| D | Telefone 2 | Telefone do responsável |
+| E | Turma | Código/Nome da Turma |
+| F | Email | Email do responsável |
+| G | Status | Aluno Ativo/Inativo |
+
 
 ## 🚀 Instalação e Configuração
 
@@ -58,7 +63,7 @@ O Sistema de Controle de Frequência Escolar é uma aplicação desenvolvida em 
    ```
    - Acesse: https://sheets.google.com
    - Crie uma nova planilha
-   - Renomeie para "Sistema de Frequência Escolar"
+   - Renomeie para "XXXXXXXXXX"
    ```
 
 2. **Configurar Abas da Planilha**
